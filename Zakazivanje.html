@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="hr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Salon Zakazivanje</title>
+  <style>
+    body { font-family: sans-serif; padding: 10px; background: #f7f7f7; }
+    h1, h2 { text-align: center; }
+    input, textarea, button {
+      width: 100%; margin: 5px 0; padding: 10px; font-size: 16px;
+    }
+    .day-block { background: white; margin: 10px 0; padding: 10px; border-radius: 5px; }
+    .entry { padding: 5px 0; border-bottom: 1px solid #ddd; }
+    .zarada { font-weight: bold; color: green; margin-top: 5px; }
+    .btn-delete { background: #e74c3c; color: white; border: none; padding: 5px; margin-top: 5px; }
+    .day-button { padding: 10px; background: #3498db; color: white; border: none; margin: 5px; cursor: pointer; }
+    .day-button:hover { background: #2980b9; }
+  </style>
+</head>
+<body>
+
+<h1>📅 Zakazivanje - 14 dana unaprijed</h1>
+
+<h2>➕ Novi termin</h2>
+
+<input id="ime" placeholder="Ime mušterije">
+<input id="usluga" placeholder="Usluga (npr. Manikir)">
+<input id="cijena" type="number" step="0.01" placeholder="Cijena (€)">
+<input id="datum" type="datetime-local">
+<textarea id="napomena" placeholder="Napomena (opciono)"></textarea>
+<button onclick="dodajTermin()">Dodaj termin</button>
+
+<hr>
+
+<div id="kalender"></div>
+<div id="raspored"></div>
+
+<script>
+  const STORAGE_KEY = "termini_salon";
+
+  function ucitajTermine() {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
+  }
+
+  function sacuvajTermine(termini) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(termini));
+  }
+
+  function dodajTermin() {
+    const ime = document.getElementById("ime").value.trim();
+    const usluga = document.getElementById("usluga").value.trim();
+    const cijena = parseFloat(document.getElementById("cijena").value);
+    const datum = document.getElementById("datum").value;
+    const napomena = document.getElementById("napomena").value.trim();
+
+    if (!ime || !usluga || isNaN(cijena) || !datum) {
+      alert("Popuni sva obavezna polja.");
+      return;
+    }
+
+    const novi = { ime, usluga, cijena, datum, napomena };
+    const termini = ucitajTermine();
+    termini.push(novi);
+    sacuvajTermine(termini);
+    prikaziRaspored(datum.slice(0, 10));
+    ocistiFormu();
+  }
+
+  function ocistiFormu() {
+    document.getElementById("ime").value = "";
+    document.getElementById("usluga").value = "";
+    document.getElementById("cijena").value = "";
+    document.getElementById("datum").value = "";
+    document.getElementById("napomena").value = "";
+  }
+
+  function daniUNedelji(index) {
+    const dani = ["Nedelja", "Ponedeljak", "Utorak", "Sreda", "Četvrtak", "Petak", "Subota"];
+    return dani[index % 7];
+  }
+
+  function formatirajDatumISO(iso) {
+    const d = new Date(iso);
+    return d.toLocaleString("hr-HR", { dateStyle: "short", timeStyle: "short" });
+  }
+
+  function prikaziKalendar() {
+    const kalendar = document.getElementById("kalender");
+    kalendar.innerHTML = "<h3>Izaberite dan</h3>";
+    
+    const danas = new Date();
+    
+    for (let i = 0; i < 14; i++) {
+      const noviDan = new Date();
+      noviDan.setDate(danas.getDate() + i);
+      const datumStr = noviDan.toISOString().slice(0, 10);
+      const prikazDatuma = noviDan.toLocaleDateString("hr-HR", { day: "2-digit", month: "2-digit", year: "numeric" });
+      const danUNedelji = daniUNedelji(noviDan.getDay());
+      
+      const button = document.createElement("button");
+      button.className = "day-button";
+      button.innerText = `${danUNedelji} ${prikazDatuma}`;
+      button.onclick = () => postaviDatum(datumStr);
+      kalendar.appendChild(button);
+    }
+  }
+
+  function postaviDatum(datumIzabrano) {
+    // Automatski popunjavanje datuma u formi
+    document.getElementById("datum").value = datumIzabrano + "T08:00"; // Početno vreme je 08:00
+    prikaziRaspored(datumIzabrano);
+  }
+
+  function prikaziRaspored(datumIzabrano) {
+    const raspored = document.getElementById("raspored");
+    raspored.innerHTML = "";
+
+    const termini = ucitajTermine();
+    const dnevniTermini = termini.filter(t => t.datum.slice(0, 10) === datumIzabrano);
+
+    let dnevnaZarada = 0;
+    const blok = document.createElement("div");
+    blok.className = "day-block";
+    blok.innerHTML = `<h3>📅 Termini za ${datumIzabrano}</h3>`;
+
+    if (dnevniTermini.length === 0) {
+      blok.innerHTML += `<p style="color:#999">Nema zakazanih termina za ovaj dan.</p>`;
+    }
+
+    dnevniTermini.forEach((t, index) => {
+      dnevnaZarada += t.cijena;
+      blok.innerHTML += `
+        <div class="entry">
+          <strong>${t.ime}</strong> – ${t.usluga}<br>
+          Vrijeme: ${formatirajDatumISO(t.datum)}<br>
+          Cijena: €${t.cijena.toFixed(2)}<br>
+          ${t.napomena ? `Napomena: ${t.napomena}<br>` : ""}
+          <button class="btn-delete" onclick="obrisiTermin('${t.datum}', '${t.ime}', '${t.usluga}')">Obriši</button>
+        </div>`;
+    });
+
+    if (dnevniTermini.length > 0) {
+      blok.innerHTML += `<div class="zarada">Zarada: €${dnevnaZarada.toFixed(2)}</div>`;
+    }
+
+    raspored.appendChild(blok);
+  }
+
+  function obrisiTermin(datum, ime, usluga) {
+    let termini = ucitajTermine();
+    termini = termini.filter(t => !(t.datum === datum && t.ime === ime && t.usluga === usluga));
+    sacuvajTermine(termini);
+    prikaziRaspored(datum.slice(0, 10));
+  }
+
+  prikaziKalendar();
+  prikaziRaspored(new Date().toISOString().slice(0, 10)); // Početno učitavanje za današnji dan
+
+</script>
+
+</body>
+</html>
